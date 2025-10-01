@@ -17,7 +17,7 @@
         "testenvironment": false,
         "updatemode": "polling",
         "addressfamily": "4",
-        "pollinterval": "1000",
+        "pollinterval": "2000",
         "usesocks": false,
         "sockshost": "",
         "socksprotocol": "socks5",
@@ -36,13 +36,13 @@
         "verboselogging": false
     },
     {
-        "id": "36efe70851011384",
+        "id": "ws_server_config",
         "type": "websocket-listener",
         "path": "/ws/chat",
         "wholemsg": "false"
     },
     {
-        "id": "df894677255aedaf",
+        "id": "telegram_receiver",
         "type": "telegram receiver",
         "z": "745006266a1bcda5",
         "name": "Telegram receiver",
@@ -53,15 +53,15 @@
         "y": 160,
         "wires": [
             [
-                "d9d7c8126a5c38a2"
+                "process_telegram_message"
             ],
             [
-                "041aa3da02b5579f"
+                "process_callback_query"
             ]
         ]
     },
     {
-        "id": "31d4f3b51fb6e1e6",
+        "id": "http_chat",
         "type": "http in",
         "z": "745006266a1bcda5",
         "name": "HTTP Chat Endpoint",
@@ -69,35 +69,35 @@
         "method": "post",
         "upload": true,
         "swaggerDoc": "",
-        "x": 130,
+        "x": 110,
         "y": 260,
         "wires": [
             [
-                "e875a4d21d5db412"
+                "process_http_message"
             ]
         ]
     },
     {
-        "id": "9915f903042c11f5",
+        "id": "websocket_in",
         "type": "websocket in",
         "z": "745006266a1bcda5",
         "name": "WebSocket In",
-        "server": "36efe70851011384",
+        "server": "ws_server_config",
         "client": "",
         "x": 110,
         "y": 380,
         "wires": [
             [
-                "257b9d6c12e9d1ed"
+                "process_websocket_message"
             ]
         ]
     },
     {
-        "id": "d9d7c8126a5c38a2",
+        "id": "process_telegram_message",
         "type": "function",
         "z": "745006266a1bcda5",
         "name": "Process Telegram Message",
-        "func": "const content = msg.payload.content || msg.payload.text || msg.payload;\nconst chatId = msg.payload.chatId || msg.payload.chat?.id;\nconst updateId = msg.payload.update_id;\n\nif (!content || !chatId) {\n    return null;\n}\n\n// Храним обработанные update_id для каждого chatId (в памяти узла)\nif (!context.get('processedUpdates')) context.set('processedUpdates', {});\nconst processedUpdates = context.get('processedUpdates');\n\n// Проверка на команду /start с дедубликацией\nif (content.trim() === '/start') {\n    if (!processedUpdates[chatId] || processedUpdates[chatId] !== updateId) {\n        processedUpdates[chatId] = updateId;\n        msg.payload = {\n            chatId: chatId,\n            type: 'message',\n            content: 'Добро пожаловать! Это юридический бот, который помогает с вопросами о законах Гражданского кодекса Украины. Задайте свой вопрос или выберите опцию из меню.',\n            options: {\n                reply_markup: {\n                    inline_keyboard: [\n                        [\n                            { text: 'Выбрать тему', callback_data: 'ask_question' },\n                            { text: 'О проекте', callback_data: 'about_project' }\n                        ]\n                    ]\n                }\n            }\n        };\n        return [null, msg];\n    }\n    return null; // Игнорируем дубликаты\n}\n\n// Проверка на обрезанный или слишком короткий запрос\nif (content.length < 10) {\n    msg.payload = {\n        chatId: chatId,\n        type: 'message',\n        content: 'Пожалуйста, уточните ваш вопрос.'\n    };\n    return [null, msg];\n}\n\nconst userName = msg.payload.from?.first_name || msg.payload.from?.username || 'User';\n\nmsg.chatId = chatId;\nmsg.userName = userName;\nmsg.originalMessage = content;\nmsg.source = 'telegram';\nmsg.payload = {\n    message: content,\n    chatId: chatId,\n    userName: userName,\n    timestamp: new Date().toISOString()\n};\n\nreturn [msg, null];",
+        "func": "const content = msg.payload.content || msg.payload.text || msg.payload;\nconst chatId = msg.payload.chatId || msg.payload.chat?.id;\nconst updateId = msg.payload.update_id;\nconst isFromUser = !msg.payload.from?.is_bot;\n\nif (!content || !chatId) {\n    return null;\n}\n\n// Храним обработанные update_id для каждого chatId (в памяти узла)\nif (!context.get('processedUpdates')) context.set('processedUpdates', {});\nconst processedUpdates = context.get('processedUpdates');\n\n// Проверка на команду /start с дедубликацией и фильтром источника\nif (content.trim() === '/start' && isFromUser) {\n    if (!processedUpdates[chatId] || processedUpdates[chatId] !== updateId) {\n        processedUpdates[chatId] = updateId;\n        msg.payload = {\n            chatId: chatId,\n            type: 'message',\n            content: 'Добро пожаловать! Это юридический бот, который помогает с вопросами об интеллектуальной собственности на основе Гражданского кодекса Украины. Задайте свой вопрос или выберите опцию из меню.',\n            options: {\n                reply_markup: {\n                    inline_keyboard: [\n                        [\n                            { text: 'Задать вопрос', callback_data: 'ask_question' },\n                            { text: 'О проекте', callback_data: 'about_project' }\n                        ]\n                    ]\n                }\n            }\n        };\n        return [null, msg];\n    }\n    return null; // Игнорируем дубликаты\n}\n\n// Проверка на обрезанный или слишком короткий запрос\nif (content.length < 10) {\n    msg.payload = {\n        chatId: chatId,\n        type: 'message',\n        content: 'Пожалуйста, уточните ваш вопрос.'\n    };\n    return [null, msg];\n}\n\nconst userName = msg.payload.from?.first_name || msg.payload.from?.username || 'User';\n\nmsg.chatId = chatId;\nmsg.userName = userName;\nmsg.originalMessage = content;\nmsg.source = 'telegram';\nmsg.payload = {\n    message: content,\n    chatId: chatId,\n    userName: userName,\n    timestamp: new Date().toISOString()\n};\n\nreturn [msg, null];",
         "outputs": 2,
         "timeout": "",
         "noerr": 0,
@@ -108,21 +108,20 @@
         "y": 120,
         "wires": [
             [
-                "3bc242fddce33010"
+                "pinecone_search"
             ],
             [
-                "a00c6cec1ed3f802"
+                "new_loader_function"
             ]
         ]
     },
     {
-        "id": "041aa3da02b5579f",
+        "id": "process_callback_query",
         "type": "function",
         "z": "745006266a1bcda5",
         "name": "Process Callback Query",
         "func": "if (msg.payload.type === 'callback_query') {\n    const callbackData = msg.payload.data;\n    const chatId = msg.payload.chatId || msg.payload.chat?.id;\n\n    let responseText = '';\n    if (callbackData === 'ask_question') {\n        responseText = 'Задайте ваш вопрос, и я помогу найти ответ на основе Гражданского кодекса Украины!';\n    } else if (callbackData === 'about_project') {\n        responseText = 'Этот проект — юридический бот, созданный для помощи в вопросах интеллектуальной собственности. Использует RAG с Pinecone и локальную модель GPT для точных ответов.';\n    } else {\n        responseText = 'Неизвестная команда.';\n    }\n\n    msg.payload = {\n        chatId: chatId,\n        type: 'message',\n        content: responseText\n    };\n\n    // Ответ на callback_query, чтобы убрать \"часики\" в Telegram\n    msg.callback_query_response = {\n        callback_query_id: msg.payload.id\n    };\n\n    return msg;\n}\n\nreturn null;",
         "outputs": 1,
-        "timeout": "",
         "noerr": 0,
         "initialize": "",
         "finalize": "",
@@ -131,12 +130,12 @@
         "y": 180,
         "wires": [
             [
-                "a00c6cec1ed3f802"
+                "new_loader_function"
             ]
         ]
     },
     {
-        "id": "e875a4d21d5db412",
+        "id": "process_http_message",
         "type": "function",
         "z": "745006266a1bcda5",
         "name": "Process HTTP Message",
@@ -150,15 +149,15 @@
         "y": 260,
         "wires": [
             [
-                "3bc242fddce33010"
+                "pinecone_search"
             ],
             [
-                "15e1e0d512382550"
+                "http_error_response"
             ]
         ]
     },
     {
-        "id": "257b9d6c12e9d1ed",
+        "id": "process_websocket_message",
         "type": "function",
         "z": "745006266a1bcda5",
         "name": "Process WebSocket Message",
@@ -172,16 +171,16 @@
         "y": 380,
         "wires": [
             [
-                "3bc242fddce33010"
+                "pinecone_search"
             ]
         ]
     },
     {
-        "id": "3bc242fddce33010",
+        "id": "pinecone_search",
         "type": "function",
         "z": "745006266a1bcda5",
         "name": "Prepare Pinecone Query",
-        "func": "msg.payload = {\n    messages: [\n        {\n            role: 'user',\n            content: msg.originalMessage\n        }\n    ],\n    stream: false,\n    model: 'gpt-4o'\n};\n\nmsg.headers = {\n    'Api-Key': env.get('PINECONE_API_KEY') || 'pcsk_TQZJm_NzgRXEUsaX3bVkQ4DJy7fWFshLCkpm1xDKRPtuV2QpKs8WBm1ZVxaAGpqXGYcFp ',\n    'Content-Type': 'application/json'\n};\n\nreturn msg;",
+        "func": "msg.payload = {\n    messages: [\n        {\n            role: 'user',\n            content: msg.originalMessage\n        }\n    ],\n    stream: false,\n    model: 'gpt-4o'\n};\n\nmsg.headers = {\n    'Api-Key': env.get('PINECONE_API_KEY') || 'pcsk_TQZJm_NzgRXEUsaX3bVkQ4DJy7fWFshLCkpm1xDKRPtuV2QpKs8WBm1ZVxaAGpqXGYcFp',\n    'Content-Type': 'application/json'\n};\n\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -192,12 +191,12 @@
         "y": 240,
         "wires": [
             [
-                "3cd9e0ac99a65d7d"
+                "pinecone_request"
             ]
         ]
     },
     {
-        "id": "3cd9e0ac99a65d7d",
+        "id": "pinecone_request",
         "type": "http request",
         "z": "745006266a1bcda5",
         "name": "Pinecone Vector Search",
@@ -212,17 +211,17 @@
         "authType": "",
         "senderr": true,
         "headers": [],
-        "x": 710,
-        "y": 540,
+        "x": 730,
+        "y": 440,
         "wires": [
             [
-                "0b08b42180b3e24b",
-                "ed953b36ffe01dbe"
+                "check_pinecone_response",
+                "2b88f482470a39b0"
             ]
         ]
     },
     {
-        "id": "0b08b42180b3e24b",
+        "id": "check_pinecone_response",
         "type": "function",
         "z": "745006266a1bcda5",
         "name": "Check Pinecone Response",
@@ -233,20 +232,20 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 960,
-        "y": 380,
+        "x": 1030,
+        "y": 360,
         "wires": [
             [
-                "1295b7aa83c51593",
-                "ed953b36ffe01dbe"
+                "prepare_ollama_request",
+                "2b88f482470a39b0"
             ],
             [
-                "224e23bc44bcbe52"
+                "route_response"
             ]
         ]
     },
     {
-        "id": "1295b7aa83c51593",
+        "id": "prepare_ollama_request",
         "type": "function",
         "z": "745006266a1bcda5",
         "name": "Prepare Ollama Request",
@@ -257,17 +256,17 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 1230,
-        "y": 460,
+        "x": 1070,
+        "y": 280,
         "wires": [
             [
-                "962d523278202b82",
-                "22f0673dcc251b9d"
+                "ollama_request",
+                "f16a7ccde242a27a"
             ]
         ]
     },
     {
-        "id": "962d523278202b82",
+        "id": "ollama_request",
         "type": "http request",
         "z": "745006266a1bcda5",
         "name": "Ollama Local LLM",
@@ -283,16 +282,16 @@
         "senderr": true,
         "headers": [],
         "x": 1350,
-        "y": 280,
+        "y": 300,
         "wires": [
             [
-                "224e23bc44bcbe52",
-                "4b778ffda12c0d9f"
+                "route_response",
+                "90a24e86e3943698"
             ]
         ]
     },
     {
-        "id": "224e23bc44bcbe52",
+        "id": "route_response",
         "type": "switch",
         "z": "745006266a1bcda5",
         "name": "Route Response",
@@ -318,26 +317,26 @@
         "checkall": "true",
         "repair": false,
         "outputs": 3,
-        "x": 1570,
-        "y": 340,
+        "x": 1590,
+        "y": 300,
         "wires": [
             [
-                "a0a198b63ee3b496"
+                "format_telegram_response"
             ],
             [
-                "5ef4035832dbbed9"
+                "format_http_response"
             ],
             [
-                "3d88b31bc1f90e9b"
+                "format_websocket_response"
             ]
         ]
     },
     {
-        "id": "a0a198b63ee3b496",
+        "id": "format_telegram_response",
         "type": "function",
         "z": "745006266a1bcda5",
         "name": "Format Telegram Response",
-        "func": "let aiResponse = '';\n\nif (msg.payload && msg.payload.response) {\n    aiResponse = msg.payload.response;\n} else if (msg.payload && msg.payload.text) {\n    aiResponse = msg.payload.text;\n} else {\n    aiResponse = 'Извините, не удалось получить ответ.';\n}\n\nmsg.payload = {\n    chatId: msg.chatId,\n    type: 'message',\n    content: aiResponse\n};\n\nreturn msg;",
+        "func": "let aiResponse = '';\n\nif (msg.payload && msg.payload.response) {\n    aiResponse = msg.payload.response;\n} else if (msg.payload && msg.payload.text) {\n    aiResponse = msg.payload.text;\n} else {\n    aiResponse = 'Извините, не удалось получить ответ.';\n}\n\nmsg.payload = {\n    chatId: msg.chatId,\n    type: 'message',\n    content: aiResponse,\n    final: true\n};\n\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -348,12 +347,12 @@
         "y": 220,
         "wires": [
             [
-                "a00c6cec1ed3f802"
+                "new_loader_function"
             ]
         ]
     },
     {
-        "id": "5ef4035832dbbed9",
+        "id": "format_http_response",
         "type": "function",
         "z": "745006266a1bcda5",
         "name": "Format HTTP Response",
@@ -364,16 +363,16 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 1830,
-        "y": 340,
+        "x": 1820,
+        "y": 300,
         "wires": [
             [
-                "0bddbd9d21e10a91"
+                "http_response"
             ]
         ]
     },
     {
-        "id": "3d88b31bc1f90e9b",
+        "id": "format_websocket_response",
         "type": "function",
         "z": "745006266a1bcda5",
         "name": "Format WebSocket Response",
@@ -388,7 +387,26 @@
         "y": 380,
         "wires": [
             [
-                "fdd0d97311a1c72b"
+                "websocket_out"
+            ]
+        ]
+    },
+    {
+        "id": "new_loader_function",
+        "type": "function",
+        "z": "745006266a1bcda5",
+        "name": "Handle Loader",
+        "func": "if (msg.payload.type === 'message' && !msg.payload.final) {\n    // Отправка лоадера\n    msg.payload.options = msg.payload.options || {};\n    msg.payload.options.reply_markup = { remove_keyboard: true }; // Убираем предыдущие кнопки\n    msg.payload.content = 'Ожидайте, обрабатываю ваш запрос...';\n    const loaderMsg = { ...msg.payload, message_id: null, temp: true };\n    context.set('loaderMsg_' + msg.payload.chatId, loaderMsg);\n    return [loaderMsg];\n} else if (msg.payload.type === 'message' && msg.payload.final) {\n    // Обновление сообщения с реальным ответом\n    const loaderMsg = context.get('loaderMsg_' + msg.payload.chatId);\n    if (loaderMsg) {\n        msg.payload.chatId = loaderMsg.chatId;\n        msg.payload.options = msg.payload.options || {};\n        msg.payload.options.reply_to_message_id = loaderMsg.message_id;\n        return [msg];\n    }\n    return [msg]; // Если лоадер не был отправлен\n} else {\n    return [msg]; // Остальные случаи\n}",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1900,
+        "y": 120,
+        "wires": [
+            [
+                "a00c6cec1ed3f802"
             ]
         ]
     },
@@ -409,36 +427,36 @@
         ]
     },
     {
-        "id": "0bddbd9d21e10a91",
+        "id": "http_response",
         "type": "http response",
         "z": "745006266a1bcda5",
         "name": "HTTP Response",
         "statusCode": "",
         "headers": {},
-        "x": 2080,
-        "y": 340,
+        "x": 2060,
+        "y": 300,
         "wires": []
     },
     {
-        "id": "fdd0d97311a1c72b",
+        "id": "websocket_out",
         "type": "websocket out",
         "z": "745006266a1bcda5",
         "name": "WebSocket Out",
-        "server": "36efe70851011384",
+        "server": "ws_server_config",
         "client": "",
-        "x": 2120,
+        "x": 2060,
         "y": 380,
         "wires": []
     },
     {
-        "id": "15e1e0d512382550",
+        "id": "http_error_response",
         "type": "http response",
         "z": "745006266a1bcda5",
         "name": "HTTP Error Response",
         "statusCode": "",
         "headers": {},
-        "x": 2100,
-        "y": 520,
+        "x": 2060,
+        "y": 460,
         "wires": []
     },
     {
@@ -455,29 +473,29 @@
         "statusVal": "",
         "statusType": "auto",
         "x": 2060,
-        "y": 100,
+        "y": 540,
         "wires": []
     },
     {
-        "id": "c779a1394885ad90",
+        "id": "catch_errors",
         "type": "catch",
         "z": "745006266a1bcda5",
         "name": "Global Error Handler",
         "scope": [
-            "3cd9e0ac99a65d7d",
-            "962d523278202b82"
+            "pinecone_request",
+            "ollama_request"
         ],
         "uncaught": true,
-        "x": 1430,
-        "y": 520,
+        "x": 1490,
+        "y": 480,
         "wires": [
             [
-                "9ad8eab60e93a574"
+                "format_error_response"
             ]
         ]
     },
     {
-        "id": "9ad8eab60e93a574",
+        "id": "format_error_response",
         "type": "function",
         "z": "745006266a1bcda5",
         "name": "Format Error Response",
@@ -488,22 +506,22 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 1670,
-        "y": 520,
+        "x": 1750,
+        "y": 480,
         "wires": [
             [
-                "a00c6cec1ed3f802"
+                "new_loader_function"
             ],
             [
-                "15e1e0d512382550"
+                "http_error_response"
             ],
             [
-                "fdd0d97311a1c72b"
+                "websocket_out"
             ]
         ]
     },
     {
-        "id": "4b778ffda12c0d9f",
+        "id": "90a24e86e3943698",
         "type": "debug",
         "z": "745006266a1bcda5",
         "name": "debug 1",
@@ -515,11 +533,11 @@
         "statusVal": "",
         "statusType": "auto",
         "x": 1520,
-        "y": 140,
+        "y": 160,
         "wires": []
     },
     {
-        "id": "ed953b36ffe01dbe",
+        "id": "2b88f482470a39b0",
         "type": "debug",
         "z": "745006266a1bcda5",
         "name": "debug 2",
@@ -531,12 +549,12 @@
         "targetType": "msg",
         "statusVal": "",
         "statusType": "auto",
-        "x": 1020,
-        "y": 540,
+        "x": 1060,
+        "y": 520,
         "wires": []
     },
     {
-        "id": "22f0673dcc251b9d",
+        "id": "f16a7ccde242a27a",
         "type": "debug",
         "z": "745006266a1bcda5",
         "name": "debug 3",
@@ -547,8 +565,8 @@
         "complete": "false",
         "statusVal": "",
         "statusType": "auto",
-        "x": 1260,
-        "y": 580,
+        "x": 1300,
+        "y": 240,
         "wires": []
     }
 ]

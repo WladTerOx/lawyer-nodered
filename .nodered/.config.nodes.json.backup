@@ -665,5 +665,30 @@
                 "file": "/Users/Wlad/Desktop/nodeProekt/node-red-main/node_modules/node-red-dashboard/nodes/ui_spacer.js"
             }
         }
+    },
+    "node-red-contrib-telegrambot": {
+        "name": "node-red-contrib-telegrambot",
+        "version": "16.3.2",
+        "local": false,
+        "user": false,
+        "nodes": {
+            "telegrambot": {
+                "name": "telegrambot",
+                "types": [
+                    "telegram bot",
+                    "telegram receiver",
+                    "telegram command",
+                    "telegram event",
+                    "telegram sender",
+                    "telegram reply",
+                    "telegram control"
+                ],
+                "enabled": true,
+                "local": false,
+                "user": false,
+                "module": "node-red-contrib-telegrambot",
+                "file": "/Users/Wlad/Desktop/nodeProekt/node-red-main/node_modules/node-red-contrib-telegrambot/telegrambot/99-telegrambot.js"
+            }
+        }
     }
 }
