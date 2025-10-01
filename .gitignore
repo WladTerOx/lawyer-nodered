@@ -11,3 +11,4 @@ flows_cred.json
 # Файлы IDE
 .vscode/
 .idea/
+.env
